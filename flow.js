@@ -93,10 +93,32 @@ pkgBox.addEventListener('click',function(e){
 var steps=['home','pkg','date','details','pay'], prevN=0;
 var grps=form.querySelectorAll('.grp'); grps[grps.length-1].classList.add('g-last');
 form.querySelector('label[for=f-pay]').classList.add('f-pay');
-form.querySelector('.send-row').after(el('p',{class:'priv',text:'Your details are used only for this booking, in line with the Data Privacy Act of 2012 (RA 10173).'}));
 var next=el('div',{class:'nextrow'},el('button',{type:'button',class:'btn',text:'Next',on:{click:function(){if(detailsOk())go('pay')}}}));
 form.querySelector('.form-main').append(next);
-var sb=form.querySelector('.send-row .btn'); if(sb) sb.textContent='Book Now';
+var sb=document.getElementById('send');
+function relabel(){ if(sb&&sb.textContent==='Send booking request') sb.textContent='Book Now' } relabel();
+if(sb) new MutationObserver(relabel).observe(sb,{childList:true,characterData:true,subtree:true});
+[].forEach.call(form.querySelectorAll('p.hint'),function(p){ if(/location/i.test(p.textContent)) p.remove() });   // old "your location will be shared" note
+/* terms + privacy tick boxes with "Read this" roll-down (text lives in legal.js) */
+var LG=window.LEGAL||{};
+function legalBody(t){ var d=el('div',{class:'lg-body',hidden:''}), ul=null; String(t||'').split('\n').forEach(function(l){ l=l.trim(); if(!l) return;
+  if(l.slice(0,3)==='## '){ ul=null; d.append(el('h4',{text:l.slice(3)})) }
+  else if(l.charAt(0)==='•'){ if(!ul){ul=el('ul');d.append(ul)} ul.append(el('li',{text:l.slice(1).trim()})) }
+  else { ul=null; d.append(el('p',{text:l})) } }); return d }
+function legalRow(id,label,txt){
+  var ck=el('input',{type:'checkbox',id:id}), body=legalBody(txt), tg=el('button',{type:'button',class:'lg-tg','aria-expanded':'false',text:'Read this ▾',on:{click:function(){var o=body.hidden; body.hidden=!o; tg.setAttribute('aria-expanded',String(o)); tg.textContent=o?'Hide ▴':'Read this ▾'}}});
+  return el('div',{class:'lg'},el('div',{class:'lg-row'},el('label',{class:'lg-ck'},ck,el('span',{},'I agree to the ',el('b',{text:label}))),tg),body)}
+var legalBox=el('div',{class:'legal'},legalRow('lg-terms','Terms of Service',LG.terms),legalRow('lg-priv','Data Privacy Policy',LG.privacy),el('p',{class:'err',id:'e-legal',role:'alert'}));
+form.querySelector('.form-main').append(legalBox);
+function legalOk(){ var t=document.getElementById('lg-terms'), p=document.getElementById('lg-priv'), bad=!t.checked?t:!p.checked?p:null;
+  document.getElementById('e-legal').textContent=bad?'Please tick both boxes to continue.':'';
+  if(bad){ var row=bad.closest('.lg-ck'); flash(row); row.scrollIntoView({block:'center',behavior:'smooth'}); bad.focus({preventScroll:true}); return false } return true }
+function resetLegal(){ ['lg-terms','lg-priv'].forEach(function(id){document.getElementById(id).checked=false}); document.getElementById('e-legal').textContent='' }
+document.addEventListener('click',function(e){ var b=e.target.closest&&e.target.closest('#send'); if(b&&!legalOk()){e.preventDefault();e.stopImmediatePropagation()} },true);
+document.addEventListener('submit',function(e){ if(e.target!==form) return;
+  if(document.body.dataset.step==='details'){e.preventDefault();e.stopImmediatePropagation(); if(detailsOk()) go('pay'); return}   // Enter key on the details page = Next
+  if(!legalOk()){e.preventDefault();e.stopImmediatePropagation()} },true);
+
 function detailsOk(){
   var f=function(id){return document.getElementById(id)}, bad=null, m={
     'f-name':['e-name','Please enter your name.',function(v){return v.trim().length>1}],
@@ -110,7 +132,7 @@ function view(s,t,p){document.body.dataset.step=s;document.body.dataset.dir='fwd
   [s3,statusPg].forEach(function(e){e.style.animation='none';void e.offsetWidth;e.style.animation=''});window.scrollTo(0,0)}
 function startOver(){
   var ag=[].filter.call(doneBox.querySelectorAll('button'),function(b){return b.textContent==='Send another request'})[0];
-  if(!doneBox.hidden&&ag) ag.click(); cur=-1; statusPg.replaceChildren(); go('home')}
+  if(!doneBox.hidden&&ag) ag.click(); cur=-1; resetLegal(); statusPg.replaceChildren(); go('home')}
 function go(s,fromHash){
   if(!doneBox.hidden&&s!=='home') return view('sent','Request sent',100);
   var k=steps.indexOf(s); if(k>1&&cur<0) s='home'; else if(k>2&&!dateChosen()) s='date';
@@ -143,7 +165,7 @@ function tidyDone(){
     sm.textContent=busy?'Getting your location...':idle?'So we can find your venue easily.':t }
 }
 new MutationObserver(tidyDone).observe(doneBox,{childList:true,subtree:true,attributes:true,attributeFilter:['hidden']});
-new MutationObserver(function(){ if(doneBox.hidden&&document.body.dataset.step==='sent'){cur=-1;go('home')} }).observe(doneBox,{attributes:true,attributeFilter:['hidden']});
+new MutationObserver(function(){ if(doneBox.hidden&&document.body.dataset.step==='sent'){cur=-1;resetLegal();go('home')} }).observe(doneBox,{attributes:true,attributeFilter:['hidden']});
 /* owner answered (Accepted / On hold / Declined): show it as its own page */
 if(appDlg) new MutationObserver(function(){
   if(!appDlg.open) return; var sv=appDlg.querySelector('.sv.ok,.sv.hold,.sv.bad'); if(!sv) return;
